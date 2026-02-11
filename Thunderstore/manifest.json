@@ -1,6 +1,6 @@
 ﻿{
 	"name": "DroneUpgradeStation",
-	"version_number": "1.0.0",
+	"version_number": "1.0.1",
 	"website_url": "https://github.com/TheSamuel17/DroneUpgradeStation",
 	"description": "Resurrects the cut Drone Upgrade Station, which allows you to sacrifice an item and give a copy of it to every currently active drone. DLC3 required.",
 	"dependencies": [
