@@ -8,13 +8,14 @@ The following changes are made:
     * Extra items that are blacklisted by default: Rusted Key, Shipping Request Form, Bundle of Fireworks, Squid Polyp, Sale Star, Chance Doll, Hopoo Feather, Wax Quail, Substandard Duplicator, War Bonds, Functional Coupler.
 * It's green.
 
+Also comes with an adjustment to the Drone Combiner Station. When used, it iterates through each of the two drones' items, takes the highest stack count, and gives it to the resulting drone. This ensures that items are never lost when combining.
+
 Not much else has been done in terms of polish, this interactable has been brought back mostly as-is.
 
 ## To-do (maybe):
 
 * Differentiate its model so it's not just a green'd-up Drone Combiner Station.
 * Stop players from wasting items if they don't have anything to upgrade.
-* SFX.
 
 ## Credits
 

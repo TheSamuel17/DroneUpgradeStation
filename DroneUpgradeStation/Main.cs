@@ -17,7 +17,7 @@ namespace DroneUpgradeStation
     [BepInDependency(DirectorAPI.PluginGUID)]
 
     // Metadata
-    [BepInPlugin("Samuel17.DroneUpgradeStation", "DroneUpgradeStation", "1.0.1")]
+    [BepInPlugin("Samuel17.DroneUpgradeStation", "DroneUpgradeStation", "1.0.2")]
 
     public class Main : BaseUnityPlugin
     {
@@ -89,6 +89,13 @@ namespace DroneUpgradeStation
                 };
             }
 
+            // Preserve highest item count stack when combining
+            On.EntityStates.DroneCombiner.DroneCombinerCombining.StartDroneCombineSequence += HandleItemsWhenCombining;
+
+            // SFX
+            On.EntityStates.DroneAssemblyStation.AssemblingDroneState.FixedUpdate += HandleSFXPart1;
+            On.EntityStates.DroneAssemblyStation.AssemblingDroneState.OnExit += HandleSFXPart2;
+
             // Lock to DLC3
             ExpansionRequirementComponent expansionRequirementComponent = droneAssemblyStationPrefab.GetComponent<ExpansionRequirementComponent>();
             if (!expansionRequirementComponent)
@@ -99,7 +106,7 @@ namespace DroneUpgradeStation
 
             // Adjust model color
             matDroneAssemblyStation.color = new Color(128f/255f, 255f/255f, 0f/255f);
-
+            
             // Guaranteed spawn on Computational Exchange
             if (Configs.spawnOnComputationalExchange.Value == true)
             {
@@ -107,41 +114,66 @@ namespace DroneUpgradeStation
             }
 
             // Functionality
+            ItemCatalog.availability.CallWhenAvailable(HandleBlacklist);
+            SceneCatalog.availability.CallWhenAvailable(HandleStages);
             OtherStuff();
 
             // Adjust ISC
             iscDroneAssemblyStation.directorCreditCost = Configs.creditCost.Value;
             iscDroneAssemblyStation.maxSpawnsPerStage = Configs.maxSpawns.Value;
+        }
 
-            RoR2Application.onLoad += () =>
+        private void HandleItemsWhenCombining(On.EntityStates.DroneCombiner.DroneCombinerCombining.orig_StartDroneCombineSequence orig, EntityStates.DroneCombiner.DroneCombinerCombining self)
+        {
+            if (NetworkServer.active)
             {
-                // Sort configs & add to stages
-                AddToStages(Configs.sceneList.Value);
+                CharacterBody drone1 = self.toUpgrade;
+                CharacterBody drone2 = self.toDestroy;
 
-                // Item blacklists
-                if (Configs.blacklistCannotCopy.Value == true)
+                if (drone1 && drone1.inventory && drone2 && drone2.inventory)
                 {
-                    HG.ReadOnlyArray<ItemIndex> cannotCopyItems = ItemCatalog.GetItemsWithTag(ItemTag.CannotCopy);
-                    foreach (ItemIndex itemIndex in cannotCopyItems)
+                    var drone2collection = drone2.inventory.permanentItemStacks.GetNonZeroIndicesSpan();
+                    foreach (ItemIndex itemIndex in drone2collection)
                     {
-                        ItemDef itemDef = ItemCatalog.GetItemDef(itemIndex);
-                        if (itemDef)
+                        int countDrone1 = drone1.inventory.GetItemCountPermanent(itemIndex);
+                        int countDrone2 = drone2.inventory.GetItemCountPermanent(itemIndex);
+                        if (countDrone1 < countDrone2)
                         {
-                            AddToBlacklist(itemDef);
+                            drone1.inventory.GiveItemPermanent(itemIndex, countDrone2 - countDrone1);
                         }
                     }
                 }
+            }
 
-                BlacklistExtraItems(Configs.blacklistExtraList.Value);
-            };
+            orig(self);
+        }
+
+        private void HandleSFXPart1(On.EntityStates.DroneAssemblyStation.AssemblingDroneState.orig_FixedUpdate orig, EntityStates.DroneAssemblyStation.AssemblingDroneState self)
+        {
+            bool canPlaySound = self.fixedAge < 1.5f;
+
+            orig(self);
+
+            if (canPlaySound && self.fixedAge >= 1.5f && self.gameObject)
+            {
+                Util.PlaySound("Play_GG_INTER_DroneAssembly_Working", self.gameObject);
+            }
+        }
+
+        private void HandleSFXPart2(On.EntityStates.DroneAssemblyStation.AssemblingDroneState.orig_OnExit orig, EntityStates.DroneAssemblyStation.AssemblingDroneState self)
+        {
+            if (self.gameObject)
+            {
+                Util.PlaySound("Play_GG_INTER_DroneAssembly_DroneReady", self.gameObject);
+            }
+
+            orig(self);
         }
 
         private void OnStageStartGlobal(Stage stage)
         {
-            if (SceneInfo.instance.sceneDef != SceneCatalog.FindSceneDef("computationalexchange"))
-            {
-                return;
-            }
+            if (!SceneInfo.instance) return;
+            if (SceneInfo.instance.sceneDef != SceneCatalog.FindSceneDef("computationalexchange")) return;
 
             Vector3 position = new Vector3(-47.6f, 121f, -50f);
             Vector3 rotation = new Vector3(5f, 165f, 0f);
@@ -184,6 +216,12 @@ namespace DroneUpgradeStation
             }
         }
 
+        private void HandleStages()
+        {
+            // Sort configs & add to stages
+            AddToStages(Configs.sceneList.Value);
+        }
+
         private void AddToStages(string sceneList)
         {
             sceneList = new string(sceneList.ToCharArray().Where(c => !char.IsWhiteSpace(c)).ToArray());
@@ -212,6 +250,24 @@ namespace DroneUpgradeStation
                 }  
             }
         }
+
+        private void HandleBlacklist()
+        {
+            if (Configs.blacklistCannotCopy.Value == true)
+            {
+                HG.ReadOnlyArray<ItemIndex> cannotCopyItems = ItemCatalog.GetItemsWithTag(ItemTag.CannotCopy);
+                foreach (ItemIndex itemIndex in cannotCopyItems)
+                {
+                    ItemDef itemDef = ItemCatalog.GetItemDef(itemIndex);
+                    if (itemDef)
+                    {
+                        AddToBlacklist(itemDef);
+                    }
+                }
+            }
+
+            BlacklistExtraItems(Configs.blacklistExtraList.Value);
+        }   
 
         private void AddToBlacklist(ItemDef itemDef)
         {
